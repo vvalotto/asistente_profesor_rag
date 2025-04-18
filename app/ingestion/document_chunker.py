@@ -184,7 +184,7 @@ class DocumentChunker:
 
     def _manual_split_text(self, text: str, metadata: Dict, available_tokens: int) -> List[Dict]:
         """
-        Método alternativo para dividir texto cuando el splitter de LlamaIndex falla.
+        Metodo alternativo para dividir texto cuando el splitter de LlamaIndex falla.
 
         Args:
             text: Texto a dividir
@@ -468,3 +468,111 @@ class DocumentChunker:
                     f"Archivos fallidos: {aggregate_stats['failed_files']}")
 
         return aggregate_stats
+
+    def evaluate_chunks_quality(self, chunks: List[Dict]) -> Dict:
+        """
+        Evalúa la calidad de los fragmentos generados.
+
+        Esta función analiza varias métricas para determinar si los fragmentos
+        son óptimos para su uso en un sistema RAG:
+        - Distribución de tamaños
+        - Preservación de párrafos/frases
+        - Solapamiento efectivo
+
+        Args:
+            chunks: Lista de fragmentos generados por split_text o process_file
+
+        Returns:
+            Diccionario con métricas de calidad
+        """
+        if not chunks:
+            logger.warning("No hay fragmentos para evaluar")
+            return {"quality_score": 0, "issues": ["No hay fragmentos para evaluar"]}
+
+        # Inicializar métricas
+        metrics = {
+            "total_chunks": len(chunks),
+            "size_distribution": {},
+            "semantic_integrity": {
+                "sentence_breaks": 0,  # Oraciones cortadas entre fragmentos
+                "paragraph_preservation": 0  # Fragmentos que contienen párrafos completos
+            },
+            "overlap_metrics": {
+                "effective_overlaps": 0,  # Fragmentos con solapamiento efectivo
+                "insufficient_overlaps": 0  # Fragmentos con solapamiento insuficiente
+            },
+            "issues": []
+        }
+
+        # Analizar distribución de tamaños
+        token_counts = [chunk["token_count"] for chunk in chunks]
+        avg_size = sum(token_counts) / len(token_counts)
+        max_size = max(token_counts)
+        min_size = min(token_counts)
+
+        metrics["size_distribution"] = {
+            "average": avg_size,
+            "max": max_size,
+            "min": min_size,
+            "std_dev": (sum((x - avg_size) ** 2 for x in token_counts) / len(token_counts)) ** 0.5
+        }
+
+        # Verificar si hay fragmentos muy pequeños o muy grandes
+        if min_size < self.chunk_size * 0.5:
+            metrics["issues"].append(f"Hay fragmentos muy pequeños (mínimo: {min_size} tokens)")
+
+        if max_size > self.chunk_size * 1.1:
+            metrics["issues"].append(f"Hay fragmentos que exceden el tamaño máximo (máximo: {max_size} tokens)")
+
+        # Análisis de integridad semántica y solapamiento
+        for i in range(len(chunks) - 1):
+            current_chunk = chunks[i]["text"]
+            next_chunk = chunks[i + 1]["text"]
+
+            # Verificar si hay oraciones cortadas (aproximado mediante puntuación)
+            if not current_chunk.endswith((".", "!", "?", ":", ";", "»", '"', "'")):
+                metrics["semantic_integrity"]["sentence_breaks"] += 1
+
+            # Verificar solapamiento efectivo
+            found_overlap = False
+
+            # Buscar las últimas N palabras del fragmento actual en el siguiente
+            last_words = " ".join(current_chunk.split()[-10:])  # Últimas 10 palabras
+            if any(word in next_chunk for word in last_words.split()):
+                metrics["overlap_metrics"]["effective_overlaps"] += 1
+                found_overlap = True
+
+            if not found_overlap:
+                metrics["overlap_metrics"]["insufficient_overlaps"] += 1
+
+        # Calcular puntuación general de calidad (0-100)
+        # 50% basado en distribución de tamaños
+        # 30% basado en integridad semántica
+        # 20% basado en solapamiento efectivo
+
+        size_score = 50 * (1 - metrics["size_distribution"]["std_dev"] / self.chunk_size)
+        size_score = max(0, min(50, size_score))
+
+        semantic_score = 30 * (1 - metrics["semantic_integrity"]["sentence_breaks"] / len(chunks))
+        semantic_score = max(0, min(30, semantic_score))
+
+        overlap_score = 0
+        if len(chunks) > 1:
+            overlap_score = 20 * (metrics["overlap_metrics"]["effective_overlaps"] / (len(chunks) - 1))
+        overlap_score = max(0, min(20, overlap_score))
+
+        metrics["quality_score"] = size_score + semantic_score + overlap_score
+
+        # Agregar interpretación de la puntuación
+        if metrics["quality_score"] >= 85:
+            metrics["quality_interpretation"] = "Excelente calidad de fragmentación"
+        elif metrics["quality_score"] >= 70:
+            metrics["quality_interpretation"] = "Buena calidad, puede usarse"
+        elif metrics["quality_score"] >= 50:
+            metrics["quality_interpretation"] = "Calidad aceptable, pero considere ajustar parámetros"
+        else:
+            metrics["quality_interpretation"] = "Calidad insuficiente, se recomienda ajustar parámetros"
+
+        logger.info(f"Evaluación de calidad: {metrics['quality_score']}/100 - {metrics['quality_interpretation']}")
+
+        return metrics

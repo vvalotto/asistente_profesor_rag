@@ -205,3 +205,43 @@ class TestDocumentChunker:
 
         # Verificar que se creó el archivo de estadísticas agregadas
         assert (output_dir / "aggregate_stats.json").exists(), "No se creó el archivo de estadísticas agregadas"
+
+    def test_evaluate_chunks_quality_problematic(self):
+        """Verificar que se detectan problemas en fragmentos de mala calidad."""
+        chunker = DocumentChunker(chunk_size=100, chunk_overlap=5)  # Poco solapamiento
+
+        # Crear fragmentos manualmente con problemas conocidos
+        chunks = [
+            {
+                "chunk_id": 0,
+                "text": "Este es un fragmento muy corto.",
+                "token_count": 8
+            },
+            {
+                "chunk_id": 1,
+                "text": "Este es un fragmento muy largo que excede significativamente el tamaño " +
+                        "máximo configurado para esta prueba y por lo tanto debería " +
+                        "ser detectado como problemático por el evaluador de calidad " * 3,
+                "token_count": 150  # Valor ficticio mayor que chunk_size
+            },
+            {
+                "chunk_id": 2,
+                "text": "Este fragmento no tiene solapamiento con el anterior.",
+                "token_count": 10
+            }
+        ]
+
+        # Evaluar calidad
+        metrics = chunker.evaluate_chunks_quality(chunks)
+
+        # Verificar que se detectaron los problemas
+        assert metrics["quality_score"] < 70  # Debería tener una puntuación baja
+        assert len(metrics["issues"]) > 0  # Debería haber identificado problemas
+
+        # Verificar detección de fragmentos pequeños
+        found_small_chunk_issue = False
+        for issue in metrics["issues"]:
+            if "pequeños" in issue:
+                found_small_chunk_issue = True
+                break
+        assert found_small_chunk_issue
