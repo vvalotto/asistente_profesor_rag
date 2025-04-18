@@ -57,3 +57,23 @@ class DocumentChunker:
 
         logger.info(f"DocumentChunker inicializado con tamaño de fragmento={chunk_size}, "
                     f"solapamiento={chunk_overlap}")
+
+    def count_tokens(self, text: str) -> int:
+        """
+        Cuenta el número de tokens en un texto dado.
+
+        Args:
+            text: Texto a analizar
+
+        Returns:
+            Número de tokens en el texto
+        """
+        if not text:
+            return 0
+
+        try:
+            tokens = self.tokenizer.encode(text)
+            return len(tokens)
+        except Exception as e:
+            logger.error(f"Error al contar tokens: {str(e)}")
+            raise
