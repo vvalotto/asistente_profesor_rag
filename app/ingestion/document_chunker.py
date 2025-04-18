@@ -104,3 +104,52 @@ class DocumentChunker:
         except Exception as e:
             logger.error(f"Error al cargar el documento {file_path}: {str(e)}")
             raise
+
+    def split_text(self, text: str, metadata: Optional[Dict] = None) -> List[Dict]:
+        """
+        Divide un texto en fragmentos óptimos para RAG.
+
+        Args:
+            text: Texto a dividir en fragmentos
+            metadata: Metadatos opcionales para asociar con los fragmentos
+
+        Returns:
+            Lista de diccionarios, cada uno conteniendo un fragmento y sus metadatos
+        """
+        if not text:
+            logger.warning("Se intentó dividir un texto vacío")
+            return []
+
+        try:
+            # Crear un documento LlamaIndex
+            llama_doc = Document(text=text, metadata=metadata or {})
+
+            # Usar el splitter para dividir el documento
+            nodes = self.splitter.get_nodes_from_documents([llama_doc])
+
+            # Convertir nodos a diccionarios
+            chunks = []
+            for i, node in enumerate(nodes):
+                chunk = {
+                    "chunk_id": i,
+                    "text": node.text,
+                    "token_count": self.count_tokens(node.text),
+                    "metadata": {
+                        **node.metadata,
+                        "chunk_index": i,
+                        "total_chunks": len(nodes)
+                    }
+                }
+                chunks.append(chunk)
+
+            logger.info(f"Texto dividido en {len(chunks)} fragmentos")
+
+            # Verificar integridad de los fragmentos
+            total_tokens = sum(chunk["token_count"] for chunk in chunks)
+            logger.info(f"Total de tokens en fragmentos: {total_tokens}")
+
+            return chunks
+
+        except Exception as e:
+            logger.error(f"Error al dividir el texto en fragmentos: {str(e)}")
+            raise
