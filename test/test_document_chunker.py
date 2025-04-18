@@ -60,3 +60,23 @@ class TestDocumentChunker:
         text1 = "Hello world"
         text2 = "Hello world " * 2
         assert chunker.count_tokens(text2) > chunker.count_tokens(text1)
+
+    def test_load_document(self, tmp_path):
+        """Verificar que se puede cargar un documento correctamente."""
+        # Crear un archivo temporal para las pruebas
+        test_content = "Este es un documento de prueba para verificar la carga de archivos."
+        test_file = tmp_path / "test_document.txt"
+        test_file.write_text(test_content, encoding='utf-8')
+
+        chunker = DocumentChunker()
+        loaded_content = chunker.load_document(str(test_file))
+
+        # Verificar que el contenido se cargó correctamente
+        assert loaded_content == test_content
+
+    def test_load_document_not_found(self):
+        """Verificar que se lanza una excepción cuando el archivo no existe."""
+        chunker = DocumentChunker()
+
+        with pytest.raises(FileNotFoundError):
+            chunker.load_document("archivo_inexistente.txt")

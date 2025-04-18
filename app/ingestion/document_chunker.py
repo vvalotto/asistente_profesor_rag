@@ -77,3 +77,30 @@ class DocumentChunker:
         except Exception as e:
             logger.error(f"Error al contar tokens: {str(e)}")
             raise
+
+    def load_document(self, file_path: str) -> str:
+        """
+        Carga un documento de texto desde un archivo.
+
+        Args:
+            file_path: Ruta al archivo de texto
+
+        Returns:
+            Contenido del archivo como una cadena de texto
+        """
+        file_path = Path(file_path)
+
+        if not file_path.exists():
+            error_msg = f"No se encontró el archivo: {file_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            logger.info(f"Documento cargado: {file_path.name} ({self.count_tokens(content)} tokens)")
+            return content
+        except Exception as e:
+            logger.error(f"Error al cargar el documento {file_path}: {str(e)}")
+            raise
