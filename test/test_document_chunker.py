@@ -155,3 +155,53 @@ class TestDocumentChunker:
             assert chunk["metadata"]["source"] == "archivo_prueba.txt"
             assert chunk["metadata"]["author"] == "Test User"
             assert chunk["metadata"]["category"] == "Pruebas"
+
+    def test_process_directory(self, tmp_path):
+        """Verificar que se procesan correctamente múltiples archivos."""
+        # Crear directorio de entrada y varios archivos de prueba
+        input_dir = tmp_path / "input"
+        input_dir.mkdir()
+
+        # Crear 3 archivos de prueba
+        for i in range(3):
+            test_file = input_dir / f"test_document_{i}.txt"
+            # Hacemos el contenido más largo para asegurar que se generen fragmentos
+            test_file.write_text(f"Este es el documento de prueba {i}. " * 30, encoding='utf-8')
+
+        # Crear un archivo con extensión diferente que no debería procesarse
+        other_file = input_dir / "ignored.md"
+        other_file.write_text("Este archivo debería ignorarse", encoding='utf-8')
+
+        # Crear directorio de salida
+        output_dir = tmp_path / "output"
+
+        # Configurar un chunker con tamaño pequeño para asegurar la fragmentación
+        chunker = DocumentChunker(chunk_size=50, chunk_overlap=10)
+
+        # Procesar el directorio y capturar las estadísticas
+        stats = chunker.process_directory(
+            str(input_dir),
+            str(output_dir),
+            file_pattern="*.txt"
+        )
+
+        # Imprimir información de depuración
+        print(f"\nInformación de depuración para test_process_directory:")
+        print(f"Archivos en directorio: {list(input_dir.glob('*.txt'))}")
+        print(f"Estadísticas: {stats}")
+
+        if "errors" in stats and stats["errors"]:
+            print(f"Errores encontrados: {stats['errors']}")
+
+        # Verificar estadísticas
+        assert stats[
+                   "processed_files"] == 3, f"Se esperaban 3 archivos procesados, pero se obtuvieron {stats['processed_files']}"
+        assert stats["total_chunks"] > 0, "No se generaron fragmentos"
+
+        # Verificar que se crearon directorios para cada archivo
+        assert (output_dir / "test_document_0").exists(), "No se creó el directorio para el primer archivo"
+        assert (output_dir / "test_document_1").exists(), "No se creó el directorio para el segundo archivo"
+        assert (output_dir / "test_document_2").exists(), "No se creó el directorio para el tercer archivo"
+
+        # Verificar que se creó el archivo de estadísticas agregadas
+        assert (output_dir / "aggregate_stats.json").exists(), "No se creó el archivo de estadísticas agregadas"
